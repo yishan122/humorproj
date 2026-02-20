@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import VoteButtons from "./VoteButtons";
 
 export default async function ProtectedPage() {
   const supabase = await createClient();
@@ -7,10 +8,41 @@ export default async function ProtectedPage() {
 
   if (!data.user) redirect("/login");
 
+  // 👇 新增：读取 captions
+  const { data: captions, error } = await supabase
+    .from("captions")
+    .select("id, content, created_datetime_utc")
+    .order("created_datetime_utc", { ascending: false })
+    .limit(20);
+
+  if (error) {
+    console.error(error);
+  }
+
   return (
     <main style={{ padding: 24 }}>
       <h1>Gated UI ✅</h1>
       <p>Signed in as: {data.user.email}</p>
+
+      <hr style={{ margin: "24px 0" }} />
+
+      <h2>Captions</h2>
+
+      {captions?.map((caption) => (
+        <div
+          key={caption.id}
+          style={{
+            padding: 16,
+            border: "1px solid #333",
+            marginBottom: 16,
+          }}
+        >
+          <p>{caption.content}</p>
+
+          {/* vote */}
+          <VoteButtons captionId={caption.id} />
+        </div>
+      ))}
     </main>
   );
 }
