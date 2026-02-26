@@ -9,7 +9,7 @@ export default function LoginPage() {
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`, // ✅ 必须是这个
+        redirectTo: `${window.location.origin}/auth/callback`, 
       },
     });
   };

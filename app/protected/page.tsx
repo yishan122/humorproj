@@ -1,14 +1,18 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import VoteButtons from "./VoteButtons";
+import UploadBox from "./UploadBox";
 
 export default async function ProtectedPage() {
   const supabase = await createClient();
   const { data } = await supabase.auth.getUser();
 
+  const { data: sessionData } = await supabase.auth.getSession();
+  console.log("session?", sessionData.session?.access_token?.slice(0, 20));
+
   if (!data.user) redirect("/login");
 
-  // 👇 新增：读取 captions
+  // captions
   const { data: captions, error } = await supabase
     .from("captions")
     .select("id, content, created_datetime_utc")
@@ -19,30 +23,31 @@ export default async function ProtectedPage() {
     console.error(error);
   }
 
-  return (
-    <main style={{ padding: 24 }}>
-      <h1>Gated UI ✅</h1>
-      <p>Signed in as: {data.user.email}</p>
+return (
+  <main style={{ padding: 24 }}>
+    <h1>Gated UI ✅</h1>
+    <p>Signed in as: {data.user.email}</p>
 
-      <hr style={{ margin: "24px 0" }} />
+    {/* 👇 新加这里 */}
+    <UploadBox />
 
-      <h2>Captions</h2>
+    <hr style={{ margin: "24px 0" }} />
 
-      {captions?.map((caption) => (
-        <div
-          key={caption.id}
-          style={{
-            padding: 16,
-            border: "1px solid #333",
-            marginBottom: 16,
-          }}
-        >
-          <p>{caption.content}</p>
+    <h2>Captions</h2>
 
-          {/* vote */}
-          <VoteButtons captionId={caption.id} />
-        </div>
-      ))}
-    </main>
+    {captions?.map((caption) => (
+      <div
+        key={caption.id}
+        style={{
+          padding: 16,
+          border: "1px solid #333",
+          marginBottom: 16,
+        }}
+      >
+        <p>{caption.content}</p>
+        <VoteButtons captionId={caption.id} />
+      </div>
+    ))}
+  </main>
   );
 }
