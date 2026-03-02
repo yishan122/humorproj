@@ -27,8 +27,6 @@ return (
   <main style={{ padding: 24 }}>
     <h1>Gated UI ✅</h1>
     <p>Signed in as: {data.user.email}</p>
-
-    {/* 👇 新加这里 */}
     <UploadBox />
 
     <hr style={{ margin: "24px 0" }} />

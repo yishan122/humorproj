@@ -2,42 +2,32 @@
 
 import { useState } from "react";
 
-type PipelineStep1 = {
-  presignedUrl: string;
-  cdnUrl: string;
-};
-
-type PipelineStep3 = {
-  imageId: string;
-};
-
 export default function UploadBox() {
   const [file, setFile] = useState<File | null>(null);
   const [status, setStatus] = useState<string>("");
-  const [captions, setCaptions] = useState<any[]>([]);
-  const [busy, setBusy] = useState(false);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [captions, setCaptions] = useState<string[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const runPipeline = async () => {
+  async function handleUpload() {
     if (!file) return;
 
-    setBusy(true);
+    setLoading(true);
     setStatus("Getting token...");
     setCaptions([]);
 
     try {
-      // Step 0: get JWT token from our server
+      //get JWT token from server
       const tokenRes = await fetch("/api/token");
-      const tokenJson = await tokenRes.json();
-      const token: string | null = tokenJson.token;
+      const { token } = await tokenRes.json();
 
       if (!token) {
-        setStatus("No token. Please login first.");
-        setBusy(false);
-        return;
+        throw new Error("Not logged in");
       }
 
-      // Step 1: Generate presigned upload URL
+      //Generate presigned URL
       setStatus("Step 1/4: Generating presigned URL...");
+
       const step1Res = await fetch(
         "https://api.almostcrackd.ai/pipeline/generate-presigned-url",
         {
@@ -54,19 +44,14 @@ export default function UploadBox() {
       );
 
       if (!step1Res.ok) {
-        const txt = await step1Res.text();
-        throw new Error(`Step1 failed: ${txt}`);
+        throw new Error(await step1Res.text());
       }
 
-      const step1: PipelineStep1 = await step1Res.json();
-      const { presignedUrl, cdnUrl } = step1;
+      const { presignedUrl, cdnUrl } = await step1Res.json();
 
-      if (!presignedUrl || !cdnUrl) {
-        throw new Error("Step1 response missing presignedUrl/cdnUrl");
-      }
+      //Upload image to presigned URL
+      setStatus("Step 2/4: Uploading image...");
 
-      // Step 2: Upload bytes to S3 via presignedUrl
-      setStatus("Step 2/4: Uploading image to presigned URL...");
       const putRes = await fetch(presignedUrl, {
         method: "PUT",
         headers: {
@@ -76,12 +61,15 @@ export default function UploadBox() {
       });
 
       if (!putRes.ok) {
-        // presigned PUT may return empty body, so just throw status
-        throw new Error(`Step2 PUT failed: ${putRes.status} ${putRes.statusText}`);
+        throw new Error("Upload failed");
       }
 
-      // Step 3: Register uploaded image URL
-      setStatus("Step 3/4: Registering image URL...");
+      // Preview image immediately
+      setImageUrl(cdnUrl);
+
+      //Register image URL
+      setStatus("Step 3/4: Registering image...");
+
       const step3Res = await fetch(
         "https://api.almostcrackd.ai/pipeline/upload-image-from-url",
         {
@@ -98,19 +86,14 @@ export default function UploadBox() {
       );
 
       if (!step3Res.ok) {
-        const txt = await step3Res.text();
-        throw new Error(`Step3 failed: ${txt}`);
+        throw new Error(await step3Res.text());
       }
 
-      const step3: PipelineStep3 = await step3Res.json();
-      const imageId = step3.imageId;
+      const { imageId } = await step3Res.json();
 
-      if (!imageId) {
-        throw new Error("Step3 response missing imageId");
-      }
-
-      // Step 4: Generate captions
+      // Generate captions
       setStatus("Step 4/4: Generating captions...");
+
       const step4Res = await fetch(
         "https://api.almostcrackd.ai/pipeline/generate-captions",
         {
@@ -124,60 +107,89 @@ export default function UploadBox() {
       );
 
       if (!step4Res.ok) {
-        const txt = await step4Res.text();
-        throw new Error(`Step4 failed: ${txt}`);
+        throw new Error(await step4Res.text());
       }
 
       const step4Json = await step4Res.json();
 
-      // step4 response shape may vary; try common cases
-      const produced =
-        Array.isArray(step4Json) ? step4Json :
-        Array.isArray(step4Json.captions) ? step4Json.captions :
-        Array.isArray(step4Json.data) ? step4Json.data :
-        [step4Json];
+      // API may return array or object
+      const result =
+        Array.isArray(step4Json)
+          ? step4Json
+          : step4Json.captions ?? [];
 
-      setCaptions(produced);
+      const captionTexts = result.map(
+        (c: any) => c.content ?? c.caption ?? JSON.stringify(c)
+      );
+
+      setCaptions(captionTexts);
       setStatus("Done ✅ Captions generated.");
-    } catch (e: any) {
-      console.error(e);
-      setStatus(e?.message ?? "Unknown error");
+    } catch (err: any) {
+      console.error(err);
+      setStatus("Error: " + err.message);
     } finally {
-      setBusy(false);
+      setLoading(false);
     }
-  };
+  }
 
   return (
-    <section style={{ marginTop: 24, padding: 16, border: "1px solid #333" }}>
-      <h2 style={{ marginTop: 0 }}>Image → Captions Pipeline</h2>
+    <div style={{ marginTop: 24, border: "1px solid #333", padding: 16 }}>
+      <h2>Image → Captions Pipeline</h2>
 
-      <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
         <input
           type="file"
           accept="image/*"
-          disabled={busy}
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+          onChange={(e) => {
+            const f = e.target.files?.[0] ?? null;
+            setFile(f);
+            setCaptions([]);
+            setStatus("");
+            if (f) {
+              setImageUrl(URL.createObjectURL(f)); // local preview
+            }
+          }}
         />
 
-        <button disabled={!file || busy} onClick={runPipeline}>
-          {busy ? "Working..." : "Upload & Generate Captions"}
+        <button
+          disabled={!file || loading}
+          onClick={handleUpload}
+        >
+          {loading ? "Working..." : "Upload & Generate Captions"}
         </button>
       </div>
 
-      {status && <p style={{ marginTop: 12 }}>Status: {status}</p>}
-
-      {captions.length > 0 && (
+      {status && (
         <div style={{ marginTop: 12 }}>
-          <h3>Generated Captions</h3>
-          <ul>
-            {captions.map((c: any, i: number) => (
-              <li key={c?.id ?? i}>
-                {c?.content ?? c?.caption ?? c?.text ?? JSON.stringify(c)}
-              </li>
-            ))}
-          </ul>
+          <strong>Status:</strong> {status}
         </div>
       )}
-    </section>
+
+      {/* 🔥 Image Preview */}
+      {imageUrl && (
+        <div style={{ marginTop: 16 }}>
+          <h3>Preview</h3>
+          <img
+            src={imageUrl}
+            alt="Preview"
+            style={{
+              maxWidth: "100%",
+              maxHeight: 300,
+              border: "1px solid #333",
+            }}
+          />
+        </div>
+      )}
+
+      {/* 🔥 Captions */}
+      {captions.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <h3>Generated Captions</h3>
+          {captions.map((text, i) => (
+            <div key={i}>{text}</div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
