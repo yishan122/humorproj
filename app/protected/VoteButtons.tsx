@@ -3,9 +3,8 @@
 import { createClient } from "@/lib/supabase/browser";
 
 export default function VoteButtons({ captionId }: { captionId: string }) {
-  const supabase = createClient();
-
   const vote = async (value: number) => {
+    const supabase = createClient();
     const { data } = await supabase.auth.getUser();
     const user = data.user;
 
