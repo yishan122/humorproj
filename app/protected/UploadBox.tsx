@@ -1,6 +1,12 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
+
+type CaptionItem = {
+  content?: string;
+  caption?: string;
+};
 
 export default function UploadBox() {
   const [file, setFile] = useState<File | null>(null);
@@ -118,15 +124,16 @@ export default function UploadBox() {
           ? step4Json
           : step4Json.captions ?? [];
 
-      const captionTexts = result.map(
-        (c: any) => c.content ?? c.caption ?? JSON.stringify(c)
+      const captionTexts = result.map((c: CaptionItem) =>
+        c.content ?? c.caption ?? JSON.stringify(c)
       );
 
       setCaptions(captionTexts);
       setStatus("Done ✅ Captions generated.");
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      setStatus("Error: " + err.message);
+      const message = err instanceof Error ? err.message : "Unknown error";
+      setStatus("Error: " + message);
     } finally {
       setLoading(false);
     }
@@ -169,13 +176,17 @@ export default function UploadBox() {
       {imageUrl && (
         <div style={{ marginTop: 16 }}>
           <h3>Preview</h3>
-          <img
+          <Image
             src={imageUrl}
             alt="Preview"
+            width={500}
+            height={300}
             style={{
               maxWidth: "100%",
               maxHeight: 300,
               border: "1px solid #333",
+              width: "auto",
+              height: "auto",
             }}
           />
         </div>

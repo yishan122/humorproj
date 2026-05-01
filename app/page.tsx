@@ -1,6 +1,19 @@
-import { supabase } from "@/lib/supabaseClient";
+import { createClient } from "@/lib/supabase/server";
 
 export default async function Home() {
+  if (
+    !process.env.NEXT_PUBLIC_SUPABASE_URL ||
+    !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  ) {
+    return (
+      <main style={{ padding: 24 }}>
+        <h1>Configuration required</h1>
+        <p>Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY.</p>
+      </main>
+    );
+  }
+
+  const supabase = await createClient();
   const { data, error } = await supabase
     .from("news_snippets")
     .select("*")
